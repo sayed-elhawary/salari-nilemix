@@ -1,0 +1,153 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import './App.css';
+
+const CreateSalary = ({ token, fetchSalaries }) => {
+  const [newSalary, setNewSalary] = useState({
+    employeeCode: '', employeeName: '', department: '', basicSalary: '',
+    transportationAllowance: '', housingAllowance: '', mealAllowance: '',
+    incentives: '', deductions: '', notes: ''
+  });
+  const [netSalary, setNetSalary] = useState(0);
+
+  useEffect(() => {
+    const calculateNetSalary = () => {
+      const basic = parseFloat(newSalary.basicSalary) || 0;
+      const transport = parseFloat(newSalary.transportationAllowance) || 0;
+      const housing = parseFloat(newSalary.housingAllowance) || 0;
+      const meal = parseFloat(newSalary.mealAllowance) || 0;
+      const incentives = parseFloat(newSalary.incentives) || 0;
+      const deductions = parseFloat(newSalary.deductions) || 0;
+      const net = basic + transport + housing + meal + incentives - deductions;
+      setNetSalary(net.toFixed(2));
+    };
+    calculateNetSalary();
+  }, [newSalary]);
+
+  const fetchUserData = async (employeeCode) => {
+    if (!employeeCode) return;
+    try {
+      const res = await axios.get(`https://nilemixx.duckdns.org/api/users/${employeeCode}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNewSalary((prev) => ({
+        ...prev,
+        employeeName: res.data.employeeName || '',
+      }));
+    } catch (err) {
+      console.error('خطأ في جلب بيانات المستخدم:', err);
+    }
+  };
+
+  const handleEmployeeCodeChange = (e) => {
+    const code = e.target.value;
+    setNewSalary((prev) => ({ ...prev, employeeCode: code }));
+    fetchUserData(code);
+  };
+
+  const createSalary = async () => {
+    try {
+      await axios.post('https://nilemixx.duckdns.org/api/salaries', newSalary, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      alert('تم تسجيل المرتب بنجاح');
+      setNewSalary({
+        employeeCode: '', employeeName: '', department: '', basicSalary: '',
+        transportationAllowance: '', housingAllowance: '', mealAllowance: '',
+        incentives: '', deductions: '', notes: ''
+      });
+      fetchSalaries();
+    } catch (err) {
+      console.error('خطأ في تسجيل المرتب:', err);
+      alert('خطأ في تسجيل المرتب: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  return (
+    <div className="dashboard" dir="rtl">
+      <div className="header">
+        <h1>تسجيل مرتب</h1>
+        <a href="/" className="back-btn">العودة إلى لوحة التحكم</a>
+      </div>
+      <div className="section">
+        <div className="form-stack">
+          <label>كود الموظف</label>
+          <input
+            type="text"
+            value={newSalary.employeeCode}
+            onChange={handleEmployeeCodeChange}
+            placeholder="كود الموظف"
+          />
+          <label>اسم الموظف</label>
+          <input
+            type="text"
+            value={newSalary.employeeName}
+            onChange={(e) => setNewSalary({ ...newSalary, employeeName: e.target.value })}
+            placeholder="اسم الموظف"
+          />
+          <label>القسم أو الوظيفة</label>
+          <input
+            type="text"
+            value={newSalary.department}
+            onChange={(e) => setNewSalary({ ...newSalary, department: e.target.value })}
+            placeholder="القسم أو الوظيفة"
+          />
+          <label>الراتب الأساسي</label>
+          <input
+            type="number"
+            value={newSalary.basicSalary}
+            onChange={(e) => setNewSalary({ ...newSalary, basicSalary: e.target.value })}
+            placeholder="الراتب الأساسي"
+          />
+          <label>بدل انتقال</label>
+          <input
+            type="number"
+            value={newSalary.transportationAllowance}
+            onChange={(e) => setNewSalary({ ...newSalary, transportationAllowance: e.target.value })}
+            placeholder="بدل انتقال"
+          />
+          <label>بدل سكن</label>
+          <input
+            type="number"
+            value={newSalary.housingAllowance}
+            onChange={(e) => setNewSalary({ ...newSalary, housingAllowance: e.target.value })}
+            placeholder="بدل سكن"
+          />
+          <label>بدل وجبات</label>
+          <input
+            type="number"
+            value={newSalary.mealAllowance}
+            onChange={(e) => setNewSalary({ ...newSalary, mealAllowance: e.target.value })}
+            placeholder="بدل وجبات"
+          />
+          <label>حوافز (بونص، عمولة)</label>
+          <input
+            type="number"
+            value={newSalary.incentives}
+            onChange={(e) => setNewSalary({ ...newSalary, incentives: e.target.value })}
+            placeholder="حوافز"
+          />
+          <label>خصومات (تأخير، سلف، غياب)</label>
+          <input
+            type="number"
+            value={newSalary.deductions}
+            onChange={(e) => setNewSalary({ ...newSalary, deductions: e.target.value })}
+            placeholder="خصومات"
+          />
+          <label>ملاحظات (اختياري)</label>
+          <textarea
+            value={newSalary.notes}
+            onChange={(e) => setNewSalary({ ...newSalary, notes: e.target.value })}
+            placeholder="ملاحظات"
+          />
+        </div>
+        <div className="net-salary">
+          <p>صافي المرتب: {netSalary} جنيه</p>
+        </div>
+        <button onClick={createSalary}>تسجيل المرتب</button>
+      </div>
+    </div>
+  );
+};
+
+export default CreateSalary;

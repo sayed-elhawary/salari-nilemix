@@ -1,0 +1,199 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+app.use(cors({
+  origin: 'https://nilemixx.duckdns.org',
+  methods: ['GET', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json());
+
+// Log MONGO_URI for debugging
+console.log('MONGO_URI:', process.env.MONGO_URI || 'MONGO_URI is undefined');
+
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI || 'mongodb://mongo:27017/payroll', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('Connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// User Schema
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['admin', 'user'], default: 'user' },
+  employeeCode: { type: String, required: true, unique: true },
+  employeeName: { type: String } // Optional field for employee name
+});
+const User = mongoose.model('User', userSchema);
+
+// Salary Schema
+const salarySchema = new mongoose.Schema({
+  employeeCode: { type: String, required: true },
+  employeeName: { type: String, required: true },
+  department: { type: String, required: true },
+  basicSalary: { type: Number, required: true },
+  transportationAllowance: { type: Number, default: 0 },
+  housingAllowance: { type: Number, default: 0 },
+  mealAllowance: { type: Number, default: 0 },
+  incentives: { type: Number, default: 0 },
+  deductions: { type: Number, default: 0 },
+  netSalary: { type: Number, required: true },
+  notes: { type: String }
+});
+const Salary = mongoose.model('Salary', salarySchema);
+
+// Middleware to verify JWT
+const authMiddleware = (req, res, next) => {
+  const token = req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ message: 'لا يوجد توكن' });
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(401).json({ message: 'توكن غير صالح' });
+  }
+};
+
+// Middleware to check admin role
+const adminMiddleware = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'مطلوب صلاحيات أدمن' });
+  }
+  next();
+};
+
+// Login Route
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(400).json({ message: 'بيانات تسجيل الدخول غير صحيحة' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'بيانات تسجيل الدخول غير صحيحة' });
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role, employeeCode: user.employeeCode },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+    res.json({ token, role: user.role });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'خطأ في الخادم', error: err.message });
+  }
+});
+
+// Admin: Create User
+app.post('/api/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { username, password, employeeCode, employeeName } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new User({ username, password: hashedPassword, role: 'user', employeeCode, employeeName });
+    await user.save();
+    res.status(201).json({ message: 'تم إنشاء المستخدم بنجاح' });
+  } catch (err) {
+    console.error('Create user error:', err);
+    res.status(400).json({ message: 'خطأ في إنشاء المستخدم', error: err.message });
+  }
+});
+
+// Admin: Get User by Employee Code
+app.get('/api/users/:employeeCode', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findOne({ employeeCode: req.params.employeeCode }, 'username employeeCode employeeName');
+    if (!user) {
+      return res.status(404).json({ message: 'المستخدم غير موجود' });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Fetch user error:', err);
+    res.status(400).json({ message: 'خطأ في جلب بيانات المستخدم', error: err.message });
+  }
+});
+
+// Admin: Create Salary
+app.post('/api/salaries', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const {
+      employeeCode, employeeName, department, basicSalary,
+      transportationAllowance, housingAllowance, mealAllowance,
+      incentives, deductions, notes
+    } = req.body;
+
+    const netSalary = parseFloat(basicSalary) +
+      parseFloat(transportationAllowance || 0) +
+      parseFloat(housingAllowance || 0) +
+      parseFloat(mealAllowance || 0) +
+      parseFloat(incentives || 0) -
+      parseFloat(deductions || 0);
+
+    const salaryRecord = new Salary({
+      employeeCode,
+      employeeName,
+      department,
+      basicSalary,
+      transportationAllowance: transportationAllowance || 0,
+      housingAllowance: housingAllowance || 0,
+      mealAllowance: mealAllowance || 0,
+      incentives: incentives || 0,
+      deductions: deductions || 0,
+      netSalary,
+      notes
+    });
+    await salaryRecord.save();
+    res.status(201).json({ message: 'تم تسجيل المرتب بنجاح' });
+  } catch (err) {
+    console.error('Salary error:', err);
+    res.status(400).json({ message: 'خطأ في تسجيل المرتب', error: err.message });
+  }
+});
+
+// Admin: Get All Salaries
+app.get('/api/salaries', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const salaries = await Salary.find();
+    res.json(salaries);
+  } catch (err) {
+    console.error('Fetch salaries error:', err);
+    res.status(400).json({ message: 'خطأ في جلب المرتبات', error: err.message });
+  }
+});
+
+// Admin: Delete Salary
+app.delete('/api/salaries/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await Salary.findByIdAndDelete(req.params.id);
+    res.json({ message: 'تم حذف المرتب بنجاح' });
+  } catch (err) {
+    console.error('Delete salary error:', err);
+    res.status(400).json({ message: 'خطأ في حذف المرتب', error: err.message });
+  }
+});
+
+// User: Get Own Salary
+app.get('/api/salaries/user', authMiddleware, async (req, res) => {
+  try {
+    const salaries = await Salary.find({ employeeCode: req.user.employeeCode });
+    res.json(salaries);
+  } catch (err) {
+    console.error('Fetch user salaries error:', err);
+    res.status(400).json({ message: 'خطأ في جلب المرتبات', error: err.message });
+  }
+});
+
+const PORT = process.env.BACKEND_PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
