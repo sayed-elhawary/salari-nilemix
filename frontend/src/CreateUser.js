@@ -3,60 +3,82 @@ import axios from 'axios';
 import './App.css';
 
 const CreateUser = ({ token }) => {
-  const [newUser, setNewUser] = useState({ username: '', password: '', employeeCode: '', employeeName: '' });
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('user');
+  const [employeeCode, setEmployeeCode] = useState('');
 
-  const createUser = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     try {
-      await axios.post('https://nilemixx.duckdns.org/api/users', newUser, {
+      await axios.post('https://nilemixx.duckdns.org/api/users', {
+        username,
+        password,
+        role,
+        employeeCode,
+      }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert('تم إنشاء المستخدم بنجاح');
-      setNewUser({ username: '', password: '', employeeCode: '', employeeName: '' });
+      setUsername('');
+      setPassword('');
+      setRole('user');
+      setEmployeeCode('');
     } catch (err) {
       console.error('خطأ في إنشاء المستخدم:', err);
-      alert('خطأ في إنشاء المستخدم: ' + (err.response?.data?.message || err.message));
+      alert('فشل إنشاء المستخدم: ' + (err.response?.data?.message || err.message));
     }
   };
 
   return (
-    <div className="dashboard" dir="rtl">
-      <div className="header">
-        <h1>إنشاء مستخدم</h1>
-        <a href="/" className="back-btn">العودة إلى لوحة التحكم</a>
-      </div>
-      <div className="section">
-        <div className="form-stack">
-          <label>اسم المستخدم</label>
+    <div className="create-user-container">
+      <h1 className="create-user-title">إنشاء مستخدم جديد</h1>
+      <form className="create-user-form" onSubmit={handleSubmit}>
+        <div className="form-group">
+          <label htmlFor="username">اسم المستخدم</label>
           <input
             type="text"
-            value={newUser.username}
-            onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-            placeholder="اسم المستخدم"
-          />
-          <label>كلمة المرور</label>
-          <input
-            type="password"
-            value={newUser.password}
-            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-            placeholder="كلمة المرور"
-          />
-          <label>كود الموظف</label>
-          <input
-            type="text"
-            value={newUser.employeeCode}
-            onChange={(e) => setNewUser({ ...newUser, employeeCode: e.target.value })}
-            placeholder="كود الموظف"
-          />
-          <label>اسم الموظف (اختياري)</label>
-          <input
-            type="text"
-            value={newUser.employeeName}
-            onChange={(e) => setNewUser({ ...newUser, employeeName: e.target.value })}
-            placeholder="اسم الموظف"
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="أدخل اسم المستخدم"
+            required
           />
         </div>
-        <button onClick={createUser}>إنشاء مستخدم</button>
-      </div>
+        <div className="form-group">
+          <label htmlFor="password">كلمة المرور</label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="أدخل كلمة المرور"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="employeeCode">كود الموظف</label>
+          <input
+            type="text"
+            id="employeeCode"
+            value={employeeCode}
+            onChange={(e) => setEmployeeCode(e.target.value)}
+            placeholder="أدخل كود الموظف (اختياري)"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="role">الدور</label>
+          <select
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="user">مستخدم</option>
+            <option value="admin">مدير</option>
+          </select>
+        </div>
+        <button type="submit" className="submit-btn">إنشاء</button>
+      </form>
     </div>
   );
 };

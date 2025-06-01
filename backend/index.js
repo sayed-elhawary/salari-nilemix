@@ -85,6 +85,9 @@ const adminMiddleware = (req, res, next) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبان' });
+    }
     const user = await User.findOne({ username });
     if (!user) {
       return res.status(400).json({ message: 'بيانات تسجيل الدخول غير صحيحة' });
@@ -111,6 +114,9 @@ app.post('/api/login', async (req, res) => {
 app.post('/api/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { username, password, employeeCode, employeeName } = req.body;
+    if (!username || !password || !employeeCode) {
+      return res.status(400).json({ message: 'جميع الحقول المطلوبة يجب أن تكون موجودة' });
+    }
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({ username, password: hashedPassword, role: 'user', employeeCode, employeeName });
     await user.save();
@@ -135,7 +141,21 @@ app.get('/api/users/:employeeCode', authMiddleware, adminMiddleware, async (req,
   }
 });
 
-// Admin: Create Salary
+// Admin: Get All Employee Codes and Names
+app.get('/api/users/codes', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const users = await User.find({}, 'employeeCode employeeName').sort({ employeeCode: 1 });
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'لا يوجد موظفون مسجلون' });
+    }
+    res.json(users);
+  } catch (err) {
+    console.error('Fetch employee codes error:', err);
+    res.status(500).json({ message: 'خطأ في جلب أكواد الموظفين', error: err.message });
+  }
+});
+
+// Admin: Create Salary (تم تعديله للسماح بأي employeeCode)
 app.post('/api/salaries', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const {
@@ -144,12 +164,12 @@ app.post('/api/salaries', authMiddleware, adminMiddleware, async (req, res) => {
       incentives, deductions, notes, createdAt
     } = req.body;
 
-    // التحقق من وجود الموظف
-    const user = await User.findOne({ employeeCode });
-    if (!user) {
-      return res.status(400).json({ message: 'كود الموظف غير موجود' });
+    // التحقق من الحقول المطلوبة
+    if (!employeeCode || !employeeName || !department || basicSalary == null) {
+      return res.status(400).json({ message: 'جميع الحقول المطلوبة (كود الموظف، الاسم، القسم، الراتب الأساسي) يجب أن تكون موجودة' });
     }
 
+    // حساب صافي الراتب
     const netSalary = parseFloat(basicSalary) +
       parseFloat(transportationAllowance || 0) +
       parseFloat(housingAllowance || 0) +
@@ -161,12 +181,12 @@ app.post('/api/salaries', authMiddleware, adminMiddleware, async (req, res) => {
       employeeCode,
       employeeName,
       department,
-      basicSalary,
-      transportationAllowance: transportationAllowance || 0,
-      housingAllowance: housingAllowance || 0,
-      mealAllowance: mealAllowance || 0,
-      incentives: incentives || 0,
-      deductions: deductions || 0,
+      basicSalary: parseFloat(basicSalary),
+      transportationAllowance: parseFloat(transportationAllowance) || 0,
+      housingAllowance: parseFloat(housingAllowance) || 0,
+      mealAllowance: parseFloat(mealAllowance) || 0,
+      incentives: parseFloat(incentives) || 0,
+      deductions: parseFloat(deductions) || 0,
       netSalary,
       notes,
       createdAt: createdAt ? new Date(createdAt) : new Date()

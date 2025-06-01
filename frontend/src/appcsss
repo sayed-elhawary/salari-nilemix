@@ -175,6 +175,12 @@
 }
 
 /* تصميم باقي التطبيق */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .login-container,
 .dashboard,
 .table-container {
